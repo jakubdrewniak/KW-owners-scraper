@@ -1,14 +1,29 @@
 import {config} from 'dotenv';
 import {program} from 'commander';
-import { webkit, Browser, Page } from 'playwright';
+import {webkit, Browser, Page} from 'playwright';
 import {expect} from "@playwright/test";
+
+type Apartment = { apNumber: number, KW: string }
+let page: Page
 
 (async () => {
     const {kwSignature, headless} = getOptions()
     const [departmentCode, KWNumber, controlNumber] = kwSignature.split('/')
 
-    const browser: Browser = await webkit.launch({ headless });
-    const page = await browser.newPage();
+    const browser: Browser = await webkit.launch({headless});
+    page = await browser.newPage();
+
+    const apartments: Apartment[] = await getApartments(departmentCode, KWNumber, controlNumber)
+    console.log(apartments)
+
+    await browser.close();
+})();
+
+async function getApartments(
+    departmentCode: string,
+    KWNumber: string,
+    controlNumber: string
+): Promise<Apartment[]> {
     await page.goto('https://przegladarka-ekw.ms.gov.pl/eukw_prz/KsiegiWieczyste/wyszukiwanieKW');
     await page.locator('#kodWydzialuInput').fill(departmentCode)
     await page.locator('#numerKsiegiWieczystej').fill(KWNumber)
@@ -21,7 +36,7 @@ import {expect} from "@playwright/test";
     const table = await page.locator('table').filter({hasText: 'Budynki'});
     await expect(table).toBeVisible()
 
-    const apartments: Record<string, string> = {}
+    const apartments: Apartment[] = []
     let apartmentRowAchieved = false;
     for (const row of await table.locator('tr').all()) {
         if (!apartmentRowAchieved) {
@@ -36,14 +51,15 @@ import {expect} from "@playwright/test";
         }
         const columns = await row.locator('td')
         const columnsCount = await columns.count();
-        const apartmentNumber = await columns.nth(columnsCount - 3).innerText();
-        const KW = await columns.nth(columnsCount - 2).innerText();
-        apartments[apartmentNumber] = KW
+        const apNumber: number = parseInt(await columns.nth(columnsCount - 3).innerText());
+        const KW: string = await columns.nth(columnsCount - 2).innerText();
+        apartments.push({apNumber, KW})
     }
-    console.log(apartments)
-
-    await browser.close();
-})();
+    apartments.sort(function (a, b) {
+        return a.apNumber - b.apNumber;
+    })
+    return apartments
+}
 
 function getOptions() {
     config();
