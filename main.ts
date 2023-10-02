@@ -3,7 +3,7 @@ import { program } from "commander";
 import { webkit, Browser, Page } from "playwright";
 import { expect } from "@playwright/test";
 import * as fs from "fs";
-import cheerio from 'cheerio';
+import cheerio from "cheerio";
 
 type Apartment = { apNumber: number; KW: string };
 let page: Page;
@@ -29,9 +29,8 @@ const SEARCH_URL =
 })();
 
 async function prepareApartmentView(ap: Apartment) {
-  const templateHtml = fs.readFileSync('template.html', 'utf-8');
+  const templateHtml = fs.readFileSync("template.html", "utf-8");
   const $ = cheerio.load(templateHtml);
-
 
   const [departmentCode, KWNumber, controlNumber] = ap.KW.split("/").map(
     (val) => val.trim(),
@@ -47,24 +46,27 @@ async function prepareApartmentView(ap: Apartment) {
 
   await page.locator('input[value="Dział I-Sp"]').click();
 
-  $('body').append(`<h2>Mieszkanie ${ap.apNumber}</h3>`);
+  $("body").append(`<h2>Mieszkanie ${ap.apNumber}</h3>`);
 
-  const table1 = await page
-    .locator("table")
-    .filter({ hasText: "UDZIAŁ ZWIĄZANY Z WŁASNOŚCIĄ LOKALU" });
-  await expect(table1).toBeVisible();
-  const table1Element = await table1.evaluate((element) => element.outerHTML);
-  console.log(table1Element)
-  $('body').append(table1Element);
+  const share = await page
+    .locator("tr")
+    .filter({ hasText: "Wielkość udziału w nieruchomości wspólnej" });
+  await expect(share).toBeVisible();
+  const shareElement = await share.evaluate((element) => element.outerHTML);
+  console.log(shareElement);
+  $("body").append(`<table><tbody>${shareElement}</tbody></table>`);
 
   await page.locator('input[value="Dział II"]').click();
 
-  const table2 = await page
-      .locator("#contentDzialu")
-  await expect(table2).toBeVisible();
-  const table2Element = await table2.evaluate((element) => element.outerHTML);
-  console.log(table2Element)
-  $('body').append(table2Element);
+  const shareHolders = await page
+    .locator("table")
+    .filter({ hasText: "Lista wskazań udziałów w prawie" });
+  await expect(shareHolders).toBeVisible();
+  const shareHoldersElement = await shareHolders.evaluate(
+    (element) => element.outerHTML,
+  );
+  console.log(shareHoldersElement);
+  $("body").append(shareHoldersElement);
 
   const outputFileName = `output.html`;
   fs.writeFileSync(outputFileName, $.html());
