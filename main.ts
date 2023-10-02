@@ -2,6 +2,8 @@ import { config } from "dotenv";
 import { program } from "commander";
 import { webkit, Browser, Page } from "playwright";
 import { expect } from "@playwright/test";
+import * as fs from "fs";
+import cheerio from 'cheerio';
 
 type Apartment = { apNumber: number; KW: string };
 let page: Page;
@@ -12,7 +14,7 @@ const SEARCH_URL =
   const { kwSignature, headless } = getOptions();
   const [departmentCode, KWNumber, controlNumber] = kwSignature.split("/");
 
-  const browser: Browser = await webkit.launch({ headless });
+  const browser: Browser = await webkit.launch({ headless, slowMo: 50 });
   page = await browser.newPage();
 
   const apartments: Apartment[] = await getApartments(
@@ -21,9 +23,52 @@ const SEARCH_URL =
     controlNumber,
   );
   console.log(apartments);
+  await prepareApartmentView(apartments[0]);
 
   await browser.close();
 })();
+
+async function prepareApartmentView(ap: Apartment) {
+  const templateHtml = fs.readFileSync('template.html', 'utf-8');
+  const $ = cheerio.load(templateHtml);
+
+
+  const [departmentCode, KWNumber, controlNumber] = ap.KW.split("/").map(
+    (val) => val.trim(),
+  );
+  await page.goto(SEARCH_URL);
+  await page.locator("#kodWydzialuInput").fill(departmentCode);
+  await page.locator("#numerKsiegiWieczystej").fill(KWNumber);
+  await page.locator("#cyfraKontrolna").fill(controlNumber);
+
+  await page.locator("#wyszukaj").click();
+
+  await page.locator("#przyciskWydrukZwykly").click();
+
+  await page.locator('input[value="Dział I-Sp"]').click();
+
+  $('body').append(`<h2>Mieszkanie ${ap.apNumber}</h3>`);
+
+  const table1 = await page
+    .locator("table")
+    .filter({ hasText: "UDZIAŁ ZWIĄZANY Z WŁASNOŚCIĄ LOKALU" });
+  await expect(table1).toBeVisible();
+  const table1Element = await table1.evaluate((element) => element.outerHTML);
+  console.log(table1Element)
+  $('body').append(table1Element);
+
+  await page.locator('input[value="Dział II"]').click();
+
+  const table2 = await page
+      .locator("#contentDzialu")
+  await expect(table2).toBeVisible();
+  const table2Element = await table2.evaluate((element) => element.outerHTML);
+  console.log(table2Element)
+  $('body').append(table2Element);
+
+  const outputFileName = `output.html`;
+  fs.writeFileSync(outputFileName, $.html());
+}
 
 async function getApartments(
   departmentCode: string,
