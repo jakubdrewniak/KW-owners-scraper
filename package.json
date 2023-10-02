@@ -3,13 +3,12 @@
   "version": "1.0.0",
   "description": "Main goal of this project is to provide possibility to gather data about flats owners by providing block of flats KW signature.\r All the data is publicly accessible, but gov site has no API and copying and pasting KWs of flats to search and copying data is something that can be automated.",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "scripts": {},
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@playwright/test": "^1.38.1",
     "@types/node": "^20.8.0",
     "playwright": "^1.38.1",
     "ts-node": "^10.9.1",
