@@ -1,6 +1,6 @@
 import { config } from "dotenv";
 import { program } from "commander";
-import { webkit, Browser, Page, chromium } from "playwright";
+import { Browser, chromium, Page } from "playwright";
 import { expect } from "@playwright/test";
 import * as fs from "fs";
 import cheerio, { CheerioAPI } from "cheerio";
@@ -51,7 +51,7 @@ const SEARCH_URL =
   fs.writeFileSync(outputFileName, $.html());
   console.log(`Output file created.`);
 
-  return;
+  process.exit();
 })();
 
 async function prepareApartmentView(ap: Apartment, $: CheerioAPI) {
