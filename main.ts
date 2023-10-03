@@ -1,9 +1,16 @@
 import { config } from "dotenv";
 import { program } from "commander";
-import { webkit, Browser, Page } from "playwright";
+import { webkit, Browser, Page, chromium } from "playwright";
 import { expect } from "@playwright/test";
 import * as fs from "fs";
 import cheerio, { CheerioAPI } from "cheerio";
+
+const userAgentStrings = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.2227.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.3497.92 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+];
 
 type Apartment = { apNumber: number; KW: string };
 let page: Page;
@@ -14,38 +21,46 @@ const SEARCH_URL =
   const { kwSignature, headless } = getOptions();
   const [departmentCode, KWNumber, controlNumber] = kwSignature.split("/");
 
-  const browser: Browser = await webkit.launch({ headless, slowMo: 50 });
+  let browser: Browser = await chromium.launch({ headless });
   page = await browser.newPage();
 
-  console.log('Creating apartments list...')
+  console.log("Creating apartments list...");
   const apartments: Apartment[] = await getApartments(
     departmentCode,
     KWNumber,
     controlNumber,
   );
-  console.log(`Apartments list complete. Length: ${apartments.length}`)
+  await browser.close();
+  console.log(`Apartments list complete. Length: ${apartments.length}`);
 
   const templateHtml = fs.readFileSync("template.html", "utf-8");
   const $ = cheerio.load(templateHtml);
 
   for (const ap of apartments) {
+    browser = await chromium.launch({ headless });
+    const context = await browser.newContext({
+      userAgent:
+        userAgentStrings[Math.floor(Math.random() * userAgentStrings.length)],
+    });
+    page = await context.newPage();
     await prepareApartmentView(ap, $);
+    await browser.close();
   }
-  console.log(`All apartments complete. Creating output file.`)
+  console.log(`All apartments complete. Creating output file.`);
   const outputFileName = `output.html`;
   fs.writeFileSync(outputFileName, $.html());
-  console.log(`Output file created.`)
+  console.log(`Output file created.`);
 
-  await browser.close();
+  return;
 })();
 
 async function prepareApartmentView(ap: Apartment, $: CheerioAPI) {
-  console.log(`Creating view for apartment ${ap.apNumber}...`)
+  console.log(`Creating view for apartment ${ap.apNumber}...`);
   const [departmentCode, KWNumber, controlNumber] = ap.KW.split("/").map(
     (val) => val.trim(),
   );
   try {
-    console.log(`Opening  apartment ${ap.apNumber} KW...`)
+    console.log(`Opening  apartment ${ap.apNumber} KW...`);
     await page.goto(SEARCH_URL);
     await page.locator("#kodWydzialuInput").fill(departmentCode);
     await page.locator("#numerKsiegiWieczystej").fill(KWNumber);
@@ -56,17 +71,30 @@ async function prepareApartmentView(ap: Apartment, $: CheerioAPI) {
     await page.locator("#przyciskWydrukZwykly").click();
 
     await page.locator('input[value="Dział I-Sp"]').click();
+  } catch (e) {
+    console.log(`Apartment number ${ap.apNumber} error at opening.`);
+    console.log(e);
+  }
 
-    console.log(`Adding apartment number ${ap.apNumber} data...`);
-    $("body").append(`<h2>Mieszkanie ${ap.apNumber}</h3>`);
+  console.log(`Adding apartment number ${ap.apNumber} data...`);
+  $("body").append(`<h2>Mieszkanie ${ap.apNumber}, ${ap.KW}</h3>`);
 
+  try {
     const share = await page
       .locator("tr")
       .filter({ hasText: "Wielkość udziału w nieruchomości wspólnej" });
     await expect(share).toBeVisible();
     const shareElement = await share.evaluate((element) => element.outerHTML);
     $("body").append(`<table><tbody>${shareElement}</tbody></table>`);
+  } catch (e) {
+    console.log(`Apartment number ${ap.apNumber} error at share table.`);
+    console.log(e);
+    $("body").append(
+      `<div>ERROR: Apartment number ${ap.apNumber} error at share table.</div>`,
+    );
+  }
 
+  try {
     await page.locator('input[value="Dział II"]').click();
 
     const shareHolders = await page
@@ -77,10 +105,13 @@ async function prepareApartmentView(ap: Apartment, $: CheerioAPI) {
       (element) => element.outerHTML,
     );
     $("body").append(shareHoldersElement);
-    console.log(`Apartment number ${ap.apNumber} data completed.`)
+    console.log(`Apartment number ${ap.apNumber} data completed.`);
   } catch (e) {
-    console.log(`Apartment number ${ap.apNumber} error.`)
+    console.log(`Apartment number ${ap.apNumber} error at shareholders.`);
     console.log(e);
+    $("body").append(
+      `<div>ERROR: Apartment number ${ap.apNumber} error at shareholders.</div>`,
+    );
   }
 }
 
